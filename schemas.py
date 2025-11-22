@@ -1,48 +1,45 @@
 """
-Database Schemas
+Database Schemas for Geo-temporal Weather Forecast Platform
 
-Define your MongoDB collection schemas here using Pydantic models.
-These schemas are used for data validation in your application.
+Collections are derived from class names in lowercase.
+- Forecast -> "forecast"
+- Alert -> "alert"
 
-Each Pydantic model represents a collection in your database.
-Model name is converted to lowercase for the collection name:
-- User -> "user" collection
-- Product -> "product" collection
-- BlogPost -> "blogs" collection
+We store forecast metadata and lightweight data products to power
+meteograms, map overlays, and historical comparisons.
 """
-
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
-from typing import Optional
 
-# Example schemas (replace with your own):
 
-class User(BaseModel):
-    """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
-    """
-    name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-    is_active: bool = Field(True, description="Whether user is active")
+class ForecastGridPoint(BaseModel):
+    lat: float
+    lon: float
+    values: List[float] = Field(..., description="Time-ordered scalar values (e.g., temperature)")
 
-class Product(BaseModel):
-    """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
-    """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
 
-# Add your own schemas here:
-# --------------------------------------------------
+class Forecast(BaseModel):
+    model: Literal["WRF", "GFS", "ICON", "ECMWF"] = "WRF"
+    init_time: str = Field(..., description="ISO timestamp for model initialization")
+    lead_hours: int = Field(..., ge=1, le=240)
+    variable: Literal["t2m", "u10", "v10", "precip", "mslp"] = "t2m"
+    bbox: List[float] = Field(..., min_items=4, max_items=4, description="[minLon, minLat, maxLon, maxLat]")
+    grid_res_km: float = 10.0
+    times: List[str] = Field(..., description="ISO timestamps for each forecast step")
+    grid: List[ForecastGridPoint] = Field(..., description="Flat list of grid points with time-series values")
 
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+
+class Alert(BaseModel):
+    name: str
+    variable: Literal["t2m", "precip", "mslp"] = "t2m"
+    threshold: float
+    comparison: Literal[">=", ">", "<=", "<"] = ">="
+    polygon: List[List[float]] = Field(..., description="Array of [lon, lat] making a closed ring")
+    active: bool = True
+
+
+class MeteogramRequest(BaseModel):
+    lat: float
+    lon: float
+    variable: Literal["t2m", "precip", "mslp"] = "t2m"
+    forecast_id: Optional[str] = None
